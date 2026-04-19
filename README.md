@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # cu_analytics
 
 A data pipeline for analyzing NCUA call report data across federally insured credit unions.
@@ -17,3 +18,6 @@ A data pipeline for analyzing NCUA call report data across federally insured cre
 - `data/` - raw and extracted NCUA data files
 - `scripts/` - download and ingestion scripts
 - `dbt/` - transformation models (bronze/silver/gold)
+=======
+# cu_analytics
+>>>>>>> 1205d7c62db7d6d9e8452bb75f397c8e1dc53418
