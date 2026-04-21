@@ -44,8 +44,12 @@ for folder in quarter_folders:
         con.execute(f"""
             CREATE OR REPLACE TEMP VIEW staging AS
             SELECT *, '{quarter}' AS quarter
-            FROM read_csv_auto('{file}', header=true)
+            FROM read_csv_auto('{file}', header=true, ignore_errors=true)
         """)
+        # Raw count before loading
+        raw_count = con.execute(f"""
+            SELECT COUNT(*) FROM read_csv_auto('{file}', header=true, ignore_errors=true)
+        """).fetchone()[0]
 
         # Create the table if it doesn't exist
         con.execute(f"""
@@ -63,11 +67,18 @@ for folder in quarter_folders:
             INSERT INTO {full_table} SELECT * FROM staging
         """)
 
-        count = con.execute(f"""
+        # Check for skipped rows
+        loaded_count = con.execute(f"""
             SELECT COUNT(*) FROM {full_table}
             WHERE quarter = '{quarter}'
         """).fetchone()[0]
-        print(f"  Loaded {count:,} rows")
+
+        if raw_count != loaded_count:
+            print(
+                f"  ⚠️  Warning: raw={raw_count}, loaded={loaded_count}, skipped={raw_count - loaded_count}"
+            )
+        else:
+            print(f"  Loaded {loaded_count:,} rows")
 
 print("\nDone! All quarters loaded.")
 con.close()
