@@ -1,1 +1,27 @@
+# Mac junk
 .DS_Store
+**/.DS_Store
+
+# Virtual environment
+.venv/
+
+# Data files -- too large and not code
+data/
+
+# DuckDB database files
+*.duckdb
+*.db
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment variables -- sensitive info
+.env
+
+# VS Code settings
+.vscode/
+
+# Jupyter notebook checkpoints
+.ipynb_checkpoints/
