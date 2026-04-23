@@ -1,0 +1,28 @@
+version: 2
+
+sources:
+  - name: bronze
+    schema: bronze
+    tables:
+      - name: foicu
+      - name: fs220
+      - name: fs220a
+      - name: fs220b
+      - name: fs220c
+      - name: fs220d
+      - name: fs220g
+      - name: fs220h
+      - name: fs220i
+      - name: fs220j
+      - name: fs220k
+      - name: fs220l
+      - name: fs220m
+      - name: fs220n
+      - name: fs220p
+      - name: fs220q
+      - name: fs220r
+      - name: fs220s
+      - name: acctdesc
+      - name: atm_locations
+      - name: credit_union_branch_information
+      - name: tradenames
