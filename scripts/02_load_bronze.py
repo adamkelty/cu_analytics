@@ -44,27 +44,41 @@ for folder in quarter_folders:
         con.execute(f"""
             CREATE OR REPLACE TEMP VIEW staging AS
             SELECT *, '{quarter}' AS quarter
-            FROM read_csv_auto('{file}', header=true, ignore_errors=true)
+            FROM read_csv_auto('{file}', header=true, ignore_errors=true, all_varchar=true)
         """)
         # Raw count before loading
         raw_count = con.execute(f"""
             SELECT COUNT(*) FROM read_csv_auto('{file}', header=true, ignore_errors=true)
         """).fetchone()[0]
 
-        # Create the table if it doesn't exist
-        con.execute(f"""
-            CREATE TABLE IF NOT EXISTS {full_table} AS
-            SELECT * FROM staging WHERE 1=0
-        """)
+    # Check if table exists
+    table_exists = con.execute(f"""
+        SELECT count(*) FROM information_schema.tables
+        WHERE table_schema = '{full_table.split(".")[0]}'
+        AND table_name = '{full_table.split(".")[1]}'
+    """).fetchone()[0]
 
-        # Delete existing data for this quarter
+    if not table_exists:
+        # Create fresh from staging
+        con.execute(f"""
+            CREATE TABLE {full_table} AS
+            SELECT * FROM staging
+        """)
+    else:
+        # Delete this quarter and reinsert only matching columns
         con.execute(f"""
             DELETE FROM {full_table} WHERE quarter = '{quarter}'
         """)
-
-        # Insert the new data
+        # Get common columns between staging and table
+        staging_cols = [col[0] for col in con.execute("DESCRIBE staging").fetchall()]
+        table_cols = [
+            col[0] for col in con.execute(f"DESCRIBE {full_table}").fetchall()
+        ]
+        common_cols = [c for c in staging_cols if c in table_cols]
+        cols_str = ", ".join(common_cols)
         con.execute(f"""
-            INSERT INTO {full_table} SELECT * FROM staging
+            INSERT INTO {full_table} ({cols_str})
+            SELECT {cols_str} FROM staging
         """)
 
         # Check for skipped rows
