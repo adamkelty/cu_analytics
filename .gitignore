@@ -28,3 +28,6 @@ __pycache__/
 
 # Log files
 logs/
+
+# Reference Files
+docs/
