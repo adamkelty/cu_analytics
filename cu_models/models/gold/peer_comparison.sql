@@ -49,6 +49,7 @@ peers as (
     from credit_unions cu
     join financials f
         on cu.cu_number = f.cu_number
+        and cu.quarter = f.quarter
 
     where cu.cu_number in (
         159,    -- three rivers
