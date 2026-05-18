@@ -8,32 +8,32 @@ renamed as (
 
     select
         cu_number,
-        cycle_date                  as reporting_date,
+        cycle_date                              as reporting_date,
 
         -- balance sheet
-        acct_010                    as total_assets,
-        acct_018                    as total_shares_and_deposits,
-        acct_025b                   as total_loans,
-        acct_719                    as allowance_for_loan_losses,
-        acct_860c                   as total_borrowings,
+        cast(acct_010 as bigint)                as total_assets,
+        cast(acct_018 as bigint)                as total_shares_and_deposits,
+        cast(acct_025b as bigint)               as total_loans,
+        cast(acct_719 as bigint)                as allowance_for_loan_losses,
+        cast(acct_860c as bigint)               as total_borrowings,
 
         -- income and profitability
-        acct_100                    as total_gross_income,
-        acct_602                    as net_income,
-        acct_380                    as dividends_on_shares,
-        acct_300                    as provision_for_loan_losses,
+        cast(acct_100 as bigint)                as total_gross_income,
+        cast(acct_602 as bigint)                as net_income,
+        cast(acct_380 as bigint)                as dividends_on_shares,
+        cast(acct_300 as bigint)                as provision_for_loan_losses,
 
         -- credit quality
-        acct_041b                   as total_delinquent_loans,
-        acct_550                    as total_charge_offs_ytd,
-        acct_551                    as total_recoveries_ytd,
+        cast(acct_041b as bigint)               as total_delinquent_loans,
+        cast(acct_550 as bigint)                as total_charge_offs_ytd,
+        cast(acct_551 as bigint)                as total_recoveries_ytd,
 
         -- membership
-        acct_083                    as total_members,
+        cast(acct_083 as bigint)                as total_members,
 
         -- equity
-        acct_940                    as undivided_earnings,
-        acct_931                    as regular_reserves,
+        cast(acct_940 as bigint)                as undivided_earnings,
+        cast(acct_931 as bigint)                as regular_reserves,
 
         quarter
 

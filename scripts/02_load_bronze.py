@@ -9,9 +9,9 @@ db_path = Path("data/cu_analytics.duckdb")
 con = duckdb.connect(str(db_path))
 
 # Create schemas
-con.execute("CREATE SCHEMA IF NOT EXISTS bronze")
-con.execute("CREATE SCHEMA IF NOT EXISTS silver")
-con.execute("CREATE SCHEMA IF NOT EXISTS gold")
+con.execute("create schema if not exists bronze")
+con.execute("create schema if not exists silver")
+con.execute("create schema if not exists gold")
 
 # Files to skip -- not real data
 skip_files = ["readme", "report1"]
@@ -40,52 +40,69 @@ for folder in quarter_folders:
 
         print(f"  Loading {file.name} into {full_table}...")
 
-        # Stage the data
+        # Get raw column names from the CSV first
+        raw_cols = [
+            col[0]
+            for col in con.execute(f"""
+            describe (select * from read_csv_auto('{file}', header=true, ignore_errors=true, all_varchar=true) limit 0)
+        """).fetchall()
+        ]
+
+        # Strip any embedded quotes from column names
+        clean_cols = [c.strip('"') for c in raw_cols]
+
+        # Build select list with aliases to normalize names
+        def sql_id(raw):
+            return f'"{raw.replace(chr(34), chr(34) + chr(34))}"'
+
+        col_select = ", ".join(
+            f'{sql_id(raw)} AS "{clean}"' for raw, clean in zip(raw_cols, clean_cols)
+        )
+
+        # Stage the data with clean column names
         con.execute(f"""
-            CREATE OR REPLACE TEMP VIEW staging AS
-            SELECT *, '{quarter}' AS quarter
-            FROM read_csv_auto('{file}', header=true, ignore_errors=true, all_varchar=true)
+            create or replace temp view staging as
+            select {col_select}, '{quarter}' as quarter
+            from read_csv_auto('{file}', header=true, ignore_errors=true, all_varchar=true)
         """)
         # Raw count before loading
         raw_count = con.execute(f"""
-            SELECT COUNT(*) FROM read_csv_auto('{file}', header=true, ignore_errors=true)
+            select count(*) from read_csv_auto('{file}', header=true, ignore_errors=true)
         """).fetchone()[0]
 
-    # Check if table exists
-    table_exists = con.execute(f"""
-        SELECT count(*) FROM information_schema.tables
-        WHERE table_schema = '{full_table.split(".")[0]}'
-        AND table_name = '{full_table.split(".")[1]}'
-    """).fetchone()[0]
+        # Check if table exists
+        table_exists = con.execute(f"""
+            select count(*) from information_schema.tables
+            where table_schema = '{full_table.split(".")[0]}'
+            and table_name = '{full_table.split(".")[1]}'
+        """).fetchone()[0]
 
-    if not table_exists:
-        # Create fresh from staging
-        con.execute(f"""
-            CREATE TABLE {full_table} AS
-            SELECT * FROM staging
-        """)
-    else:
-        # Delete this quarter and reinsert only matching columns
-        con.execute(f"""
-            DELETE FROM {full_table} WHERE quarter = '{quarter}'
-        """)
-        # Get common columns between staging and table
-        staging_cols = [col[0] for col in con.execute("DESCRIBE staging").fetchall()]
-        table_cols = [
-            col[0] for col in con.execute(f"DESCRIBE {full_table}").fetchall()
-        ]
-        common_cols = [c for c in staging_cols if c in table_cols]
-        cols_str = ", ".join(common_cols)
-        con.execute(f"""
-            INSERT INTO {full_table} ({cols_str})
-            SELECT {cols_str} FROM staging
-        """)
+        if not table_exists:
+            con.execute(f"""
+                create table {full_table} as
+                select * from staging
+            """)
+        else:
+            con.execute(f"""
+               delete from {full_table} where quarter = '{quarter}'
+           """)
+            staging_cols = [
+                col[0] for col in con.execute("describe staging").fetchall()
+            ]
+            table_cols = [
+                col[0] for col in con.execute(f"describe {full_table}").fetchall()
+            ]
+            common_cols = [c for c in staging_cols if c in table_cols]
+            cols_str = ", ".join(f'"{c}"' for c in common_cols)
+            con.execute(f"""
+                insert into {full_table} ({cols_str})
+                select {cols_str} from staging
+            """)
 
-        # Check for skipped rows
         loaded_count = con.execute(f"""
-            SELECT COUNT(*) FROM {full_table}
-            WHERE quarter = '{quarter}'
-        """).fetchone()[0]
+           select count(*) from {full_table}
+           where quarter = '{quarter}'
+       """).fetchone()[0]
 
         if raw_count != loaded_count:
             print(
