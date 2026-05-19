@@ -27,6 +27,23 @@ for folder in quarter_folders:
     quarter = "-".join(folder.name.split("-")[-2:])
     print(f"\nLoading quarter: {quarter}")
 
+    # Skip if this quarter is already loaded
+    table_exists = con.execute("""
+        select count(*) from information_schema.tables
+        where table_schema = 'bronze'
+        and table_name = 'fs220'
+    """).fetchone()[0]
+
+    if table_exists:
+        quarter_exists = con.execute(f"""
+            select count(*) from bronze.fs220
+            where quarter = '{quarter}'
+        """).fetchone()[0]
+
+        if quarter_exists:
+            print("  Already loaded, skipping")
+            continue
+
     # Dynamically build table list from files in this folder
     for file in sorted(folder.glob("*.txt")):
         # Skip non-data files
@@ -40,37 +57,28 @@ for folder in quarter_folders:
 
         print(f"  Loading {file.name} into {full_table}...")
 
-        # Get raw column names from the CSV first
-        raw_cols = [
-            col[0]
-            for col in con.execute(f"""
-            describe (select * from read_csv_auto('{file}', header=true, ignore_errors=true, all_varchar=true) limit 0)
-        """).fetchall()
-        ]
-
-        # Strip any embedded quotes from column names
-        clean_cols = [c.strip('"') for c in raw_cols]
-
-        # Build select list with aliases to normalize names
-        def sql_id(raw):
-            return f'"{raw.replace(chr(34), chr(34) + chr(34))}"'
-
-        col_select = ", ".join(
-            f'{sql_id(raw)} AS "{clean}"' for raw, clean in zip(raw_cols, clean_cols)
-        )
-
-        # Stage the data with clean column names
+        # Stage the data -- normalize_names cleans column names,
+        # union_by_name handles schema differences across quarters
         con.execute(f"""
             create or replace temp view staging as
-            select {col_select}, '{quarter}' as quarter
-            from read_csv_auto('{file}', header=true, ignore_errors=true, all_varchar=true)
+            select *, '{quarter}' as quarter
+            from read_csv('{file}',
+                header=true,
+                all_varchar=true,
+                ignore_errors=true,
+                normalize_names=true,
+                union_by_name=true)
         """)
+
         # Raw count before loading
         raw_count = con.execute(f"""
-            select count(*) from read_csv_auto('{file}', header=true, ignore_errors=true)
+            select count(*) from read_csv('{file}',
+                header=true,
+                ignore_errors=true,
+                normalize_names=true)
         """).fetchone()[0]
 
-        # Check if table exists
+        # Create table if new, otherwise insert by name
         table_exists = con.execute(f"""
             select count(*) from information_schema.tables
             where table_schema = '{full_table.split(".")[0]}'
@@ -78,31 +86,33 @@ for folder in quarter_folders:
         """).fetchone()[0]
 
         if not table_exists:
-            con.execute(f"""
-                create table {full_table} as
-                select * from staging
-            """)
+            con.execute(f"create table {full_table} as select * from staging")
         else:
-            con.execute(f"""
-               delete from {full_table} where quarter = '{quarter}'
-           """)
-            staging_cols = [
-                col[0] for col in con.execute("describe staging").fetchall()
-            ]
-            table_cols = [
-                col[0] for col in con.execute(f"describe {full_table}").fetchall()
-            ]
-            common_cols = [c for c in staging_cols if c in table_cols]
-            cols_str = ", ".join(f'"{c}"' for c in common_cols)
-            con.execute(f"""
-                insert into {full_table} ({cols_str})
-                select {cols_str} from staging
-            """)
+            con.execute(f"delete from {full_table} where quarter = '{quarter}'")
+
+            # Find columns in staging that the table doesn't have yet
+            staging_cols = {
+                c[0]: c[1] for c in con.execute("describe staging").fetchall()
+            }
+            table_cols = {
+                c[0] for c in con.execute(f"describe {full_table}").fetchall()
+            }
+            new_cols = [c for c in staging_cols if c not in table_cols]
+
+            # Add any new columns to the table (schema evolution)
+            for col in new_cols:
+                con.execute(
+                    f'alter table {full_table} add column "{col}" {staging_cols[col]}'
+                )
+                print(f"    + added new column: {col}")
+
+            # Insert by name -- fills missing columns with null
+            con.execute(f"insert into {full_table} by name select * from staging")
 
         loaded_count = con.execute(f"""
-           select count(*) from {full_table}
-           where quarter = '{quarter}'
-       """).fetchone()[0]
+            select count(*) from {full_table}
+            where quarter = '{quarter}'
+        """).fetchone()[0]
 
         if raw_count != loaded_count:
             print(

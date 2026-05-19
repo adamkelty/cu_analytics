@@ -1,4 +1,3 @@
-import os
 import shutil
 import zipfile
 from pathlib import Path
@@ -20,7 +19,7 @@ else:
         # Move to raw
         dest = raw / zip_file.name
         shutil.move(str(zip_file), str(dest))
-        print(f"Moved to data/raw/")
+        print("Moved to data/raw/")
 
         # Extract to extracted
         with zipfile.ZipFile(dest, "r") as z:
